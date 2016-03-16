@@ -1,0 +1,23 @@
+--solarized-light
+Config { font = "-*-terminus-*-r-*-*-*-*-*-*-*-*-*-u"
+       , bgColor = "black"
+    -- , fgColor = "#00b7eb"
+       , fgColor = "lightblue"	
+       -- , visibleColor = "#00b7eb"
+       , position = TopW L 100
+       , lowerOnStart = True
+       , commands = [ 
+       	 	      Run Weather "EGPF" ["-t"," <tempF>F","-L","64","-H","77","--normal","paleyellow","--high","salmon","--low","lightblue"] 36000 
+                    , Run Cpu ["-L","3","-H","50","--normal","lightblue","--high","salmon"] 10
+                    , Run Memory ["-t","Mem: <usedratio>%"] 10
+                    , Run Swap [] 10
+                    , Run Date "%a %b %_d %l:%M" "date" 10
+                    , Run StdinReader
+--		    , Run Com "/home/joao/.xmonad/xmobar/volume.sh" [] "volume" 10
+		   -- , Run MPD ["-t", "<state>: <artist> - <track>"] 10
+                    , Run Battery ["-t","<left>% / <timeleft>","-L","50","-H","75","-h","#lightblue","-n","salmon","-l","#lightblue"] 10
+		    ]
+       , sepChar = "%"
+       , alignSep = "}{"
+       , template = "%StdinReader% }{<fc=green>%volume%</fc> | %cpu% | %memory% * %swap% |%EGPF% | %battery%  <fc=lightpink>[ %date%h ]</fc>"
+       }

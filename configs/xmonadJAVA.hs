@@ -1,0 +1,194 @@
+-- javavesion
+
+import XMonad
+import XMonad.Util.Loggers
+import System.IO
+import System.Posix.Env (getEnv)
+import System.Exit
+import Data.Maybe (maybe)
+import Data.Ratio ((%))
+import Data.Map (Map)
+import qualified Data.Map as M
+import Data.Monoid (appEndo)
+import qualified Data.Map as M
+import XMonad.StackSet (RationalRect (..), currentTag)
+import qualified XMonad.StackSet as W
+import XMonad.Hooks.DynamicLog
+import XMonad.Hooks.ManageHelpers (isFullscreen, doFullFloat, doCenterFloat, doRectFloat)
+import XMonad.Hooks.UrgencyHook
+import XMonad.Hooks.FadeInactive
+import XMonad.Hooks.EwmhDesktops (ewmh)
+import XMonad.Hooks.ManageDocks (ToggleStruts (..), avoidStruts, manageDocks)
+import XMonad.Layout.ResizableTile
+import XMonad.Layout.Reflect
+import XMonad.Layout.IM
+import XMonad.Layout.Tabbed
+import XMonad.Layout.PerWorkspace (onWorkspace)
+import XMonad.Layout.Grid
+import XMonad.Layout.NoBorders
+import XMonad.Layout.Square
+import XMonad.Layout.SimplestFloat (simplestFloat)
+import XMonad.Util.Run(spawnPipe)
+import XMonad.Util.EZConfig(additionalKeys)
+import XMonad.Util.Dmenu
+import XMonad.Util.Scratchpad
+import XMonad.Util.WindowProperties (getProp32s)
+import XMonad.Util.WorkspaceCompare
+import XMonad.Prompt
+import XMonad.Prompt.Man
+import qualified XMonad.Prompt as P
+import XMonad.Prompt.Shell
+import Graphics.X11.Xlib
+import XMonad.Actions.WindowGo
+import qualified XMonad.Actions.Search as S
+import XMonad.Actions.Search
+import qualified XMonad.Actions.Submap as SM
+import XMonad.Actions.GridSelect
+import XMonad.Actions.CycleWS (nextWS, prevWS, shiftToNext,shiftToPrev)
+import XMonad.Hooks.SetWMName
+
+background = "black"
+foreground = "cyan"
+
+currentColor   = "white"
+visibleColor   = "#999999"
+hiddenColor    = "#1A1A1A"
+hiddenWinColor = "#B2B2B2"
+myWorkspaces = ["1 Main","2 Web","3 Chat","4 Media","5 Misc","6 Float"] ++ ["7 ","8 ","9"]
+
+myManageHook = composeAll . concat $
+    [   [ className   =? w                 --> doShift "2 Web"   | w <- browsers]
+      , [ className   =? c                 --> doShift "3 Chat"  | c <- chat]
+      , [ className   =? t                 --> doShift "4 Media" | t <- torrents]
+      , [ resource    =? "desktop_window"  --> doIgnore
+        , title       =? "weechat"         --> doShift "3 Chat"
+        , className   =? "weechat"         --> doShift "3 Chat"
+        , className   =? "Thunderbird"     --> doShift "3 Chat"
+        , className   =? "idea"     --> doShift "5 Chat"
+        , className   =? "Plugin-container"     --> doFullFloat
+        , title       =? "weechat"         --> doShift (myWorkspaces !! 2)
+        , title       =? "finch"           --> doShift "3 Chat", className   =? "Gimp"            --> doShift "6 Float"
+        , className   =? "Deluge"          --> doShift "5 Misc"
+        , className   =? "Thunderbird"     --> doShift "3 Chat"
+        , title       =? "Save a Bookmark" --> doCenterFloat
+        --, isFullscreen                     --> doFullFloat
+      ]] 
+      where 
+            browsers  = ["Firefox","Midori","Chromium Browser","Chrome","Google-chrome"]
+            media     = ["banshee-1", "Rhythmbox"]
+            chat      = ["Weechat","Gwibber", "Empathy", "Pidgin"]
+            torrents  = ["Qbittorrent","qBittorrent","qbittorrent","Deluge"]
+
+myManageScratchPad = scratchpadManageHook (W.RationalRect l t w h)
+  where
+    h = 0.7            -- terminal height, 10%
+    w = 0.5            -- terminal width, 100%
+    t = 1 - h -0.15      -- distance from top edge, 90%
+    l = 1 - w -0.02  -- distance from left edge, 0%
+       
+standardLayout = avoidStruts $ tall ||| Mirror tall ||| noBorders Full
+  where
+    tall = Tall nmaster delta ratio
+    nmaster = 1
+    ratio = 1/2
+    delta = 3/100
+
+layoutChat = avoidStruts $ tall ||| Mirror tall ||| noBorders Full
+  where
+    tall = Tall 1 (5/100) (2%3)
+
+myLayout   = onWorkspace "6 Float" simplestFloat $
+             onWorkspace "3 Chat" layoutChat $
+             standardLayout
+
+myTerminal = "xterm"
+myLogHook  = dynamicLogWithPP xmobarPP
+
+main = do
+    spawn "sh /home/joao/shFiles/.fehbg"
+    --spawn "xbacklight = 100"
+    --spawn "./weechat.sh"
+    spawn "xcompmgr"
+    spawn "qbittorrent"
+    --spawn "pidgin"
+    --spawn "thunderbird"
+    --spawn "deluge"
+    --spawn "finch"
+    spawn "sh /home/joao/shFiles/switchToDefault"
+    spawn "xflux -l 33.55, 44.55"
+    
+    xmproc <- spawnPipe "/usr/bin/xmobar /home/joao/.xmonad/xmobar/.xmobarrc"
+    xmonad $ defaultConfig
+        {
+          startupHook = setWMName "LG3D"
+        , borderWidth = 1
+        , normalBorderColor      = "black"
+        , focusedBorderColor     = "gray"
+        , terminal               = myTerminal
+        , workspaces             = myWorkspaces
+        , manageHook             = manageDocks <+> (isFullscreen --> doFullFloat) <+> myManageHook <+> myManageScratchPad
+        , layoutHook             = myLayout
+        , logHook                = fadeOutLogHook (fadeIf isUnfocusedOnCurrentWS 0.985) <+> dynamicLogWithPP xmobarPP
+             {
+               ppOutput          = hPutStrLn xmproc
+--             , ppTitle           = xmobarColor currentColor "" . wrap "[" "]" . shorten 70
+             , ppTitle           = xmobarColor currentColor "" . shorten 70
+             , ppHidden          = xmobarColor hiddenWinColor "" . noScratchPad
+             , ppVisible         = xmobarColor visibleColor "" . wrap "" ""
+             , ppCurrent         = xmobarColor currentColor "" 
+             , ppLayout          = const ""
+             , ppHiddenNoWindows = noScratchPad . xmobarColor hiddenColor ""
+             , ppUrgent          = xmobarColor "yellow" "red" . xmobarStrip
+             , ppSep             = "    "
+             , ppWsSep           = "   "
+             , ppSort            = fmap (.scratchpadFilterOutWorkspace) getSortByTag
+             }
+             , modMask           = mod4Mask
+        }
+       
+        `additionalKeys`
+        [ ((mod4Mask .|. shiftMask, xK_z), spawn "xscreensaver-command -lock")
+          , ((controlMask , xK_q), return ())
+          , ((mod4Mask .|. shiftMask, xK_q), return ())
+        , ((controlMask, xK_Print), spawn "sleep 0.2; scrot -s")
+        , ((0, xK_Print), spawn "scrot")
+        , ((mod4Mask, xK_f), spawn "firefox &")
+        , ((mod1Mask, xK_F4), kill)
+        , ((mod4Mask .|. shiftMask, xK_d), spawn "nautilus /home/joao/Transferências")
+        , ((mod4Mask .|. shiftMask, xK_f), spawn "nautilus /home/joao/Fac")
+        , ((mod4Mask .|. shiftMask, xK_v), spawn "nautilus /home/joao")
+    --    , ((mod4Mask .|. shiftMask, xK_v), spawn "thunar /home/joao/Transferências")
+        , ((mod4Mask .|. shiftMask, xK_r), spawn "nautilus /run/media/joao/C*/")
+        , ((mod4Mask .|. shiftMask, xK_e), spawn "emacs &")
+        , ((mod4Mask .|. shiftMask, xK_c), kill)
+        , ((mod4Mask .|. controlMask,  xK_space), spawn "dmenu_run")
+        , ((mod4Mask .|. shiftMask, xK_Down), spawn "xbacklight -10")
+        , ((mod4Mask .|. shiftMask, xK_Up), spawn "xbacklight +10")
+        , ((mod4Mask .|. shiftMask, xK_s), spawn "xbacklight -10")
+        , ((mod4Mask .|. shiftMask, xK_a), spawn "sh shFiles/bright.sh")
+        , ((mod4Mask, xK_Up), spawn "amixer -c 0 set Master 1+ unmute")
+        , ((mod4Mask, xK_Down), spawn "amixer -c 0 set Master 1- unmute")
+        , ((mod4Mask, xK_d), spawn "amixer -c 0 set Master 2+ unmute")
+        , ((mod4Mask, xK_s), spawn "amixer -c 0 set Master 2- unmute")
+        , ((mod4Mask, xK_a), spawn "amixer -D pulse set Master Playback Switch toggle")
+        , ((mod4Mask, xK_x), spawn "xmonad --recompile && xmonad --restart")
+        , ((mod4Mask, xK_t), spawn "qbittorrent")
+        , ((mod4Mask .|. shiftMask, xK_x), spawn "emacs ~/.xmonad/xmonad.hs")
+        , ((mod4Mask .|. shiftMask, xK_z), spawn "emacs ~/.Xresources")
+        , ((mod4Mask, xK_z), spawn "xrdb -merge ~/.Xresources")
+        , ((mod4Mask .|. shiftMask, xK_F2), spawn "pkill -u joao")
+        , ((mod4Mask .|. shiftMask, xK_Escape), spawn "poweroff")
+        , ((mod4Mask .|. shiftMask, xK_F1), spawn "poweroff --r")
+        , ((mod4Mask, xK_F3), spawn "killall weechat")
+        , ((mod4Mask, xK_F9), spawn "~/.xmonad/theme.sh")
+        , ((mod4Mask, xK_Right), nextWS)
+        , ((mod4Mask, xK_Left),  prevWS)
+        , ((mod4Mask, xK_F1), manPrompt defaultXPConfig)
+        , ((mod4Mask, xK_Return), scratchpadSpawnActionTerminal "xterm")
+        ,((mod4Mask, xK_n), spawn "sh ~/switchToDefault.sh")
+        ,((mod4Mask, xK_m), spawn "sh ~/switchToPortrait.sh")
+        ,((mod4Mask, xK_j), spawn "sh ~/.xmonad/toggleJava.sh")
+        ,((mod4Mask, xK_i), spawn "sh ~/shFiles/idea.sh")
+          ]
+      where
+        noScratchPad ws = if ws == "NSP" then "" else ws
